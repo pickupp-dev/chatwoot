@@ -54,4 +54,7 @@ module Events::Types
   # agent events
   AGENT_ADDED = 'agent.added'
   AGENT_REMOVED = 'agent.removed'
+
+  # contact note events
+  NOTE_CREATED = 'note.created'
 end

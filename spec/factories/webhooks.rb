@@ -13,6 +13,7 @@ FactoryBot.define do
         message_created
         message_updated
         webwidget_triggered
+        note_created
       ]
     end
   end

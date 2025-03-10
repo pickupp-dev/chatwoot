@@ -197,6 +197,13 @@ class ActionCableListener < BaseListener
     contact_inbox.hmac_verified? ? contact.contact_inboxes.where(hmac_verified: true).filter_map(&:pubsub_token) : [contact_inbox.pubsub_token]
   end
 
+  def note_created(event)
+    note, account = extract_note_and_account(event)
+    tokens = user_tokens(account, account.agents)
+
+    broadcast(account, tokens, NOTE_CREATED, note.push_event_data)
+  end
+
   def broadcast(account, tokens, event_name, data)
     return if tokens.blank?
 
