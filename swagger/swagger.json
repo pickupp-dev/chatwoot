@@ -6071,7 +6071,8 @@
               "contact_updated",
               "message_created",
               "message_updated",
-              "webwidget_triggered"
+              "webwidget_triggered",
+              "note_created"
             ]
           },
           "description": "The list of subscribed events"

@@ -15,6 +15,7 @@ const SUPPORTED_WEBHOOK_EVENTS = [
   'webwidget_triggered',
   'contact_created',
   'contact_updated',
+  'note_created',
 ];
 
 export default {

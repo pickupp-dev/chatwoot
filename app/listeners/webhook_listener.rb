@@ -83,6 +83,12 @@ class WebhookListener < BaseListener
     deliver_account_webhooks(payload, account)
   end
 
+  def note_created(event)
+    note, account = extract_note_and_account(event)
+    payload = note.webhook_data.merge(event: __method__.to_s)
+    deliver_account_webhooks(payload, account)
+  end
+
   private
 
   def deliver_account_webhooks(payload, account)

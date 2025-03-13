@@ -1,3 +1,4 @@
+# rubocop:disable RSpec/MultipleMemoizedHelpers
 require 'rails_helper'
 describe WebhookListener do
   let(:listener) { described_class.instance }
@@ -6,6 +7,7 @@ describe WebhookListener do
   let!(:user) { create(:user, account: account) }
   let!(:inbox) { create(:inbox, account: account) }
   let!(:contact) { create(:contact, account: account) }
+  let!(:note) { create(:note, account: account) }
   let!(:conversation) { create(:conversation, account: account, inbox: inbox, assignee: user) }
   let!(:message) do
     create(:message, message_type: 'outgoing',
@@ -14,6 +16,7 @@ describe WebhookListener do
   let!(:message_created_event) { Events::Base.new(event_name, Time.zone.now, message: message) }
   let!(:conversation_created_event) { Events::Base.new(event_name, Time.zone.now, conversation: conversation) }
   let!(:contact_event) { Events::Base.new(event_name, Time.zone.now, contact: contact) }
+  let!(:note_event) { Events::Base.new(event_name, Time.zone.now, note: note) }
 
   describe '#message_created' do
     let(:event_name) { :'message.created' }
@@ -279,4 +282,24 @@ describe WebhookListener do
       end
     end
   end
+
+  describe '#note_created' do
+    let(:event_name) { :'note.created' }
+
+    context 'when webhook is not configured' do
+      it 'does not trigger webhook' do
+        expect(WebhookJob).to receive(:perform_later).exactly(0).times
+        listener.note_created(note_event)
+      end
+    end
+
+    context 'when webhook is configured' do
+      it 'triggers webhook' do
+        webhook = create(:webhook, account: account)
+        expect(WebhookJob).to receive(:perform_later).with(webhook.url, note.webhook_data.merge(event: 'note_created')).once
+        listener.note_created(note_event)
+      end
+    end
+  end
 end
+# rubocop:enable RSpec/MultipleMemoizedHelpers

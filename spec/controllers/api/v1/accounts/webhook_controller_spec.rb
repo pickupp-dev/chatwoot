@@ -85,7 +85,7 @@ RSpec.describe 'Webhooks API', type: :request do
         expect(
           response.parsed_body['payload']['webhook']['subscriptions']
         ).to eql %w[conversation_status_changed conversation_updated conversation_created contact_created contact_updated
-                    message_created message_updated webwidget_triggered]
+                    message_created message_updated webwidget_triggered note_created]
       end
     end
   end

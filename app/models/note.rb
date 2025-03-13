@@ -26,12 +26,38 @@ class Note < ApplicationRecord
   belongs_to :account
   belongs_to :contact
   belongs_to :user
+  after_create_commit :dispatch_create_event
 
   scope :latest, -> { order(created_at: :desc) }
+
+  def push_event_data
+    {
+      id: id,
+      content: content,
+      contact_id: contact_id,
+      user_id: user_id,
+      account_id: account_id,
+      type: 'note'
+    }
+  end
+
+  def webhook_data
+    {
+      id: id,
+      content: content,
+      contact: contact.webhook_data,
+      user: user.webhook_data,
+      account: account.webhook_data
+    }
+  end
 
   private
 
   def ensure_account_id
     self.account_id = contact&.account_id
+  end
+
+  def dispatch_create_event
+    Rails.configuration.dispatcher.dispatch(NOTE_CREATED, Time.zone.now, note: self)
   end
 end
