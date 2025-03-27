@@ -98,7 +98,7 @@ class Line::IncomingMessageService
   end
 
   def message_type_non_text?(type)
-    [Line::Bot::Event::MessageType::Video, Line::Bot::Event::MessageType::Audio, Line::Bot::Event::MessageType::Image].include?(type)
+    [Line::Bot::Event::MessageType::Video, Line::Bot::Event::MessageType::Audio, Line::Bot::Event::MessageType::Image, Line::Bot::Event::MessageType::File].include?(type)
   end
 
   def account

@@ -38,8 +38,8 @@ class Line::SendOnLineService < Base::SendOnChannelService
 
       {
         type: attachment.file_type,
-        originalContentUrl: attachment.download_url,
-        previewImageUrl: attachment.download_url
+        originalContentUrl: attachment.file_url,
+        previewImageUrl: attachment.file_url
       }
     end
   end
