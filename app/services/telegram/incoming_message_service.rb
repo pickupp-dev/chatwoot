@@ -43,8 +43,8 @@ class Telegram::IncomingMessageService
 
   def process_message_attachments
     attach_location
-    attach_contact
     attach_files
+    attach_contact
   end
 
   def update_contact_avatar
@@ -155,12 +155,16 @@ class Telegram::IncomingMessageService
   end
 
   def attach_contact
-    return unless vcard
+    return unless contact_card
 
     @message.attachments.new(
       account_id: @message.account_id,
       file_type: :contact,
-      fallback_title: "#{vcard[:first_name]}, #{vcard[:phone_number]}"
+      fallback_title: contact_card['phone_number'].to_s,
+      meta: {
+        first_name: contact_card['first_name'],
+        last_name: contact_card['last_name']
+      }
     )
   end
 
@@ -182,8 +186,8 @@ class Telegram::IncomingMessageService
     @location ||= params.dig(:message, :location).presence
   end
 
-  def vcard
-    @vcard ||= params.dig(:message, :contact).presence
+  def contact_card
+    @contact_card ||= params.dig(:message, :contact).presence
   end
 
   def visual_media_params
