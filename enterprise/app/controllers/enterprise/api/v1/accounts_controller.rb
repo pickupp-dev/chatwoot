@@ -55,18 +55,36 @@ class Enterprise::Api::V1::AccountsController < Api::BaseController
     end
   end
 
+  def topup_checkout
+    return render json: { error: I18n.t('errors.topup.credits_required') }, status: :unprocessable_entity if params[:credits].blank?
+
+    service = Enterprise::Billing::TopupCheckoutService.new(account: @account)
+    result = service.create_checkout_session(credits: params[:credits].to_i)
+
+    @account.reload
+    render json: result.merge(
+      id: @account.id,
+      limits: @account.limits,
+      custom_attributes: @account.custom_attributes
+    )
+  rescue Enterprise::Billing::TopupCheckoutService::Error, Stripe::StripeError => e
+    render_could_not_create_error(e.message)
+  end
+
   private
 
   def check_cloud_env
-    installation_config = InstallationConfig.find_by(name: 'DEPLOYMENT_ENV')
-    render json: { error: 'Not found' }, status: :not_found unless installation_config&.value == 'cloud'
+    render json: { error: 'Not found' }, status: :not_found unless ChatwootApp.chatwoot_cloud?
   end
 
   def default_limits
     {
       'conversation' => {},
       'non_web_inboxes' => {},
-      'agents' => {},
+      'agents' => {
+        'allowed' => @account.usage_limits[:agents],
+        'consumed' => agents(@account)
+      },
       'captain' => @account.usage_limits[:captain]
     }
   end

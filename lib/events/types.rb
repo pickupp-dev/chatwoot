@@ -57,4 +57,7 @@ module Events::Types
 
   # contact note events
   NOTE_CREATED = 'note.created'
+
+  # copilot events
+  COPILOT_MESSAGE_CREATED = 'copilot.message.created'
 end
