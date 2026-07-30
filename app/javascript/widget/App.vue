@@ -66,6 +66,9 @@ export default {
         ? getLanguageDirection(this.$root.$i18n.locale)
         : false;
     },
+    isUnreadOrCampaignView() {
+      return ['unread-messages', 'campaigns'].includes(this.$route.name);
+    },
   },
   watch: {
     activeCampaign() {
@@ -82,6 +85,7 @@ export default {
     const { websiteToken, locale, widgetColor } = window.chatwootWebChannel;
     this.setLocale(locale);
     this.setWidgetColor(widgetColor);
+    this.setWidgetColorVariable(widgetColor);
     setHeader(window.authToken);
     if (this.isIFrame) {
       this.registerListeners();
@@ -114,6 +118,14 @@ export default {
       'resetCampaign',
     ]),
     ...mapActions('agent', ['fetchAvailableAgents']),
+    setWidgetColorVariable(widgetColor) {
+      if (widgetColor) {
+        document.documentElement.style.setProperty(
+          '--widget-color',
+          widgetColor
+        );
+      }
+    },
     scrollConversationToBottom() {
       const container = this.$el.querySelector('.conversation-wrap');
       container.scrollTop = container.scrollHeight;
@@ -365,6 +377,7 @@ export default {
       'is-widget-right': isRightAligned,
       'is-bubble-hidden': hideMessageBubble,
       'is-flat-design': isWidgetStyleFlat,
+      'bg-n-slate-2 dark:bg-n-solid-1': !isUnreadOrCampaignView,
       dark: prefersDarkMode,
     }"
   >
