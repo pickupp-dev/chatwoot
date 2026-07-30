@@ -174,7 +174,7 @@ class Message < ApplicationRecord
       additional_attributes: additional_attributes,
       content_attributes: content_attributes,
       content_type: content_type,
-      content: outgoing_content,
+      content: outgoing_content(for_webhook: true),
       conversation: conversation.webhook_data,
       created_at: created_at,
       id: id,
@@ -189,8 +189,8 @@ class Message < ApplicationRecord
   end
 
   # Method to get content with survey URL for outgoing channel delivery
-  def outgoing_content
-    MessageContentPresenter.new(self).outgoing_content
+  def outgoing_content(for_webhook: false)
+    MessageContentPresenter.new(self).outgoing_content(for_webhook: for_webhook)
   end
 
   def email_notifiable_message?

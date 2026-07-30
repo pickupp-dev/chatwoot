@@ -1,5 +1,5 @@
 class MessageContentPresenter < SimpleDelegator
-  def outgoing_content
+  def outgoing_content(for_webhook: false)
     content_to_send = if should_append_survey_link?
                         survey_link = survey_url(conversation.uuid)
                         custom_message = inbox.csat_config&.dig('message')
@@ -7,6 +7,8 @@ class MessageContentPresenter < SimpleDelegator
                       else
                         content
                       end
+
+    return content_to_send if for_webhook
 
     Messages::MarkdownRendererService.new(
       content_to_send,
