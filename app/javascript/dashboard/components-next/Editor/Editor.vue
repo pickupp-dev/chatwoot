@@ -1,49 +1,36 @@
 <script setup>
-import { computed, ref, watch } from 'vue';
+import { computed, ref, watch, useSlots } from 'vue';
 
 import WootEditor from 'dashboard/components/widgets/WootWriter/Editor.vue';
 
 const props = defineProps({
-  modelValue: {
-    type: String,
-    default: '',
-  },
-  label: {
-    type: String,
-    default: '',
-  },
-  placeholder: {
-    type: String,
-    default: '',
-  },
-  focusOnMount: {
-    type: Boolean,
-    default: false,
-  },
-  maxLength: {
-    type: Number,
-    default: 200,
-  },
-  showCharacterCount: {
-    type: Boolean,
-    default: true,
-  },
-  disabled: {
-    type: Boolean,
-    default: false,
-  },
-  message: {
-    type: String,
-    default: '',
-  },
+  modelValue: { type: String, default: '' },
+  editorKey: { type: String, default: '' },
+  label: { type: String, default: '' },
+  placeholder: { type: String, default: '' },
+  focusOnMount: { type: Boolean, default: false },
+  maxLength: { type: Number, default: 200 },
+  showCharacterCount: { type: Boolean, default: true },
+  disabled: { type: Boolean, default: false },
+  message: { type: String, default: '' },
   messageType: {
     type: String,
     default: 'info',
     validator: value => ['info', 'error', 'success'].includes(value),
   },
+  enableVariables: { type: Boolean, default: false },
+  enableCannedResponses: { type: Boolean, default: true },
+  enableCaptainTools: { type: Boolean, default: false },
+  signature: { type: String, default: '' },
+  allowSignature: { type: Boolean, default: false },
+  sendWithSignature: { type: Boolean, default: false },
+  channelType: { type: String, default: '' },
+  medium: { type: String, default: '' },
 });
 
-const emit = defineEmits(['update:modelValue']);
+const emit = defineEmits(['update:modelValue', 'executeCopilotAction']);
+
+const slots = useSlots();
 
 const isFocused = ref(false);
 
@@ -54,7 +41,7 @@ const messageClass = computed(() => {
     case 'error':
       return 'text-n-ruby-9 dark:text-n-ruby-9';
     case 'success':
-      return 'text-green-500 dark:text-green-400';
+      return 'text-n-teal-10 dark:text-n-teal-10';
     default:
       return 'text-n-slate-11 dark:text-n-slate-11';
   }
@@ -81,7 +68,7 @@ const handleBlur = () => {
 watch(
   () => props.modelValue,
   newValue => {
-    if (props.maxLength && props.showCharacterCount) {
+    if (props.maxLength && props.showCharacterCount && !slots.actions) {
       if (characterCount.value >= props.maxLength) {
         emit('update:modelValue', newValue.slice(0, props.maxLength));
       }
@@ -110,21 +97,37 @@ watch(
       ]"
     >
       <WootEditor
+        :editor-id="editorKey"
         :model-value="modelValue"
         :placeholder="placeholder"
         :focus-on-mount="focusOnMount"
         :disabled="disabled"
+        :enable-variables="enableVariables"
+        :enable-canned-responses="enableCannedResponses"
+        :enable-captain-tools="enableCaptainTools"
+        :signature="signature"
+        :allow-signature="allowSignature"
+        :send-with-signature="sendWithSignature"
+        :channel-type="channelType"
+        :medium="medium"
         @input="handleInput"
         @focus="handleFocus"
         @blur="handleBlur"
+        @execute-copilot-action="
+          (...args) => emit('executeCopilotAction', ...args)
+        "
       />
       <div
-        v-if="showCharacterCount"
+        v-if="showCharacterCount || slots.actions"
         class="flex items-center justify-end h-4 ltr:right-3 rtl:left-3"
       >
-        <span class="text-xs tabular-nums text-n-slate-10">
+        <span
+          v-if="showCharacterCount && !slots.actions"
+          class="text-xs tabular-nums text-n-slate-10"
+        >
           {{ characterCount }} / {{ maxLength }}
         </span>
+        <slot v-else name="actions" />
       </div>
     </div>
     <p
@@ -139,34 +142,26 @@ watch(
 
 <style lang="scss" scoped>
 .editor-wrapper {
-  ::v-deep {
-    .ProseMirror-menubar-wrapper {
-      @apply gap-2 !important;
+  :deep(.ProseMirror-menubar-wrapper) {
+    .ProseMirror.ProseMirror-woot-style {
+      p {
+        @apply first:mt-0 !important;
+      }
 
-      .ProseMirror-menubar {
-        @apply bg-transparent dark:bg-transparent w-fit left-1 pt-0 h-5  !important;
+      .empty-node {
+        @apply m-0 !important;
 
-        .ProseMirror-menuitem {
-          @apply h-5 !important;
-        }
-
-        .ProseMirror-icon {
-          @apply p-1 w-3 h-3 text-n-slate-12 dark:text-n-slate-12 !important;
+        &::before {
+          @apply text-n-slate-11 dark:text-n-slate-11;
         }
       }
-      .ProseMirror.ProseMirror-woot-style {
-        p {
-          @apply first:mt-0 !important;
-        }
+    }
 
-        .empty-node {
-          @apply m-0 !important;
-
-          &::before {
-            @apply text-n-slate-11 dark:text-n-slate-11 !important;
-          }
-        }
-      }
+    .ProseMirror-menubar {
+      width: fit-content !important;
+      position: relative !important;
+      top: unset !important;
+      @apply ltr:left-[-0.188rem] rtl:right-[-0.188rem] !important;
     }
   }
 }

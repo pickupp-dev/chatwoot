@@ -1,6 +1,7 @@
 import * as types from '../mutation-types';
 import ContactAPI from '../../api/contacts';
 import ConversationApi from '../../api/conversations';
+import camelcaseKeys from 'camelcase-keys';
 
 export const createMessagePayload = (payload, message) => {
   const { content, cc_emails, bcc_emails } = message;
@@ -24,7 +25,9 @@ export const createConversationPayload = ({ params, contactId, files }) => {
   payload.append('inbox_id', inboxId);
   payload.append('contact_id', contactId);
   payload.append('source_id', sourceId);
-  payload.append('additional_attributes[mail_subject]', mailSubject);
+  if (mailSubject) {
+    payload.append('additional_attributes[mail_subject]', mailSubject);
+  }
   payload.append('assignee_id', assigneeId);
 
   return payload;
@@ -73,6 +76,10 @@ export const getters = {
   },
   getContactConversation: $state => id => {
     return $state.records[Number(id)] || [];
+  },
+  getAllConversationsByContactId: $state => id => {
+    const records = $state.records[Number(id)] || [];
+    return camelcaseKeys(records, { deep: true });
   },
 };
 

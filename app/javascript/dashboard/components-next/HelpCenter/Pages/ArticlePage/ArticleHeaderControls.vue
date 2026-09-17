@@ -3,6 +3,7 @@ import { ref, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import { OnClickOutside } from '@vueuse/components';
+import { useUISettings } from 'dashboard/composables/useUISettings';
 import {
   ARTICLE_TABS,
   CATEGORY_ALL,
@@ -12,6 +13,7 @@ import {
 import TabBar from 'dashboard/components-next/tabbar/TabBar.vue';
 import Button from 'dashboard/components-next/button/Button.vue';
 import DropdownMenu from 'dashboard/components-next/dropdown-menu/DropdownMenu.vue';
+import EmojiIcon from 'dashboard/components-next/emoji-icon-picker/EmojiIcon.vue';
 
 const props = defineProps({
   categories: {
@@ -37,6 +39,7 @@ const emit = defineEmits([
 
 const route = useRoute();
 const { t } = useI18n();
+const { updateUISettings } = useUISettings();
 
 const isCategoryMenuOpen = ref(false);
 const isLocaleMenuOpen = ref(false);
@@ -61,18 +64,15 @@ const activeTabIndex = computed(() => {
   return tabs.value.findIndex(tab => tab.value === tabParam);
 });
 
-const activeCategoryName = computed(() => {
-  const activeCategory = props.categories.find(
-    category => category.slug === route.params.categorySlug
-  );
+const activeCategory = computed(() =>
+  props.categories.find(category => category.slug === route.params.categorySlug)
+);
 
-  if (activeCategory) {
-    const { icon, name } = activeCategory;
-    return `${icon} ${name}`;
-  }
-
-  return t('HELP_CENTER.ARTICLES_PAGE.ARTICLES_HEADER.CATEGORY.ALL');
-});
+const activeCategoryName = computed(
+  () =>
+    activeCategory.value?.name ||
+    t('HELP_CENTER.ARTICLES_PAGE.ARTICLES_HEADER.CATEGORY.ALL')
+);
 
 const activeLocaleName = computed(() => {
   return props.allowedLocales.find(
@@ -92,6 +92,7 @@ const categoryMenuItems = computed(() => {
     value: category.slug,
     action: 'filter',
     emoji: category.icon,
+    iconColor: category.icon_color,
   }));
 
   const hasCategorySlug = !!route.params.categorySlug;
@@ -111,13 +112,12 @@ const localeMenuItems = computed(() => {
   }));
 });
 
-const hasMoreThanOneLocaleMenuItems = computed(() => {
-  return localeMenuItems.value?.length > 1;
-});
-
 const handleLocaleAction = ({ value }) => {
   emit('localeChange', value);
   isLocaleMenuOpen.value = false;
+  updateUISettings({
+    last_active_locale_code: value,
+  });
 };
 
 const handleCategoryAction = ({ value }) => {
@@ -143,7 +143,7 @@ const handleTabChange = value => {
     />
     <div class="flex items-start justify-between w-full gap-2">
       <div class="flex items-center gap-2">
-        <div v-if="hasMoreThanOneLocaleMenuItems" class="relative group">
+        <div class="relative group">
           <OnClickOutside @trigger="isLocaleMenuOpen = false">
             <Button
               :label="activeLocaleName"
@@ -157,7 +157,8 @@ const handleTabChange = value => {
             <DropdownMenu
               v-if="isLocaleMenuOpen"
               :menu-items="localeMenuItems"
-              class="left-0 w-40 max-w-[300px] mt-2 overflow-y-auto xl:right-0 top-full max-h-60"
+              show-search
+              class="left-0 w-40 max-w-[300px] mt-2 xl:right-0 top-full max-h-60"
               @action="handleLocaleAction"
             />
           </OnClickOutside>
@@ -165,19 +166,29 @@ const handleTabChange = value => {
         <div v-if="hasCategoryMenuItems" class="relative group">
           <OnClickOutside @trigger="isCategoryMenuOpen = false">
             <Button
-              :label="activeCategoryName"
               icon="i-lucide-chevron-down"
               size="sm"
               color="slate"
               trailing-icon
               class="max-w-48"
               @click="isCategoryMenuOpen = !isCategoryMenuOpen"
-            />
+            >
+              <span class="flex items-center gap-1.5 min-w-0">
+                <EmojiIcon
+                  v-if="activeCategory?.icon"
+                  :value="activeCategory.icon"
+                  :color="activeCategory.icon_color"
+                  class="flex-shrink-0 size-4"
+                />
+                <span class="truncate">{{ activeCategoryName }}</span>
+              </span>
+            </Button>
 
             <DropdownMenu
               v-if="isCategoryMenuOpen"
               :menu-items="categoryMenuItems"
-              class="left-0 w-48 mt-2 overflow-y-auto xl:right-0 top-full max-h-60"
+              show-search
+              class="left-0 w-48 mt-2 xl:right-0 top-full max-h-60"
               @action="handleCategoryAction"
             />
           </OnClickOutside>

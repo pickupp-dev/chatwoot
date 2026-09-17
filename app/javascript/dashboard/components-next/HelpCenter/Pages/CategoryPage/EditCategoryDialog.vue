@@ -52,8 +52,8 @@ const activeLocaleCode = computed(() => activeLocale.value?.code ?? '');
 const onUpdateCategory = async () => {
   if (!categoryFormRef.value) return;
   const { state } = categoryFormRef.value;
-  const { id, name, slug, icon, description } = state;
-  const categoryData = { name, icon, slug, description };
+  const { id, name, slug, icon, iconColor, description } = state;
+  const categoryData = { name, icon, icon_color: iconColor, slug, description };
   categoryData.id = id;
 
   try {
@@ -97,16 +97,14 @@ defineExpose({ dialogRef });
     :disable-confirm-button="isUpdatingCategory || isInvalidForm"
     @confirm="onUpdateCategory"
   >
-    <template #form>
-      <CategoryForm
-        ref="categoryFormRef"
-        mode="edit"
-        :selected-category="selectedCategory"
-        :active-locale-code="activeLocaleCode"
-        :portal-name="route.params.portalSlug"
-        :active-locale-name="activeLocaleName"
-        :show-action-buttons="false"
-      />
-    </template>
+    <CategoryForm
+      ref="categoryFormRef"
+      mode="edit"
+      :selected-category="selectedCategory"
+      :active-locale-code="activeLocaleCode"
+      :portal-name="route.params.portalSlug"
+      :active-locale-name="activeLocaleName"
+      :show-action-buttons="false"
+    />
   </Dialog>
 </template>

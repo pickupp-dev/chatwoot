@@ -6,8 +6,9 @@ import { OnClickOutside } from '@vueuse/components';
 import { useMapGetter } from 'dashboard/composables/store';
 
 import Button from 'dashboard/components-next/button/Button.vue';
-import Thumbnail from 'dashboard/components-next/thumbnail/Thumbnail.vue';
+import Avatar from 'dashboard/components-next/avatar/Avatar.vue';
 import DropdownMenu from 'dashboard/components-next/dropdown-menu/DropdownMenu.vue';
+import EmojiIcon from 'dashboard/components-next/emoji-icon-picker/EmojiIcon.vue';
 import ArticleEditorProperties from 'dashboard/components-next/HelpCenter/Pages/ArticleEditorPage/ArticleEditorProperties.vue';
 
 const props = defineProps({
@@ -50,7 +51,7 @@ const author = computed(() => {
 });
 
 const authorName = computed(
-  () => author.value?.name || author.value?.available_name || '-'
+  () => author.value?.name || author.value?.available_name || ''
 );
 const authorThumbnailSrc = computed(() => author.value?.thumbnail);
 
@@ -84,28 +85,20 @@ const findCategoryFromSlug = slug => {
   return categories.value?.find(category => category.slug === slug);
 };
 
-const assignCategoryFromSlug = slug => {
-  const categoryFromSlug = findCategoryFromSlug(slug);
-  if (categoryFromSlug) {
-    selectedCategoryId.value = categoryFromSlug.id;
-    return categoryFromSlug;
-  }
-  return null;
-};
-
 const selectedCategory = computed(() => {
   if (isNewArticle.value) {
+    if (selectedCategoryId.value) {
+      return (
+        categories.value?.find(c => c.id === selectedCategoryId.value) || null
+      );
+    }
     if (categorySlugFromRoute.value) {
-      const categoryFromSlug = assignCategoryFromSlug(
+      const categoryFromSlug = findCategoryFromSlug(
         categorySlugFromRoute.value
       );
       if (categoryFromSlug) return categoryFromSlug;
     }
-    return selectedCategoryId.value
-      ? categories.value.find(
-          category => category.id === selectedCategoryId.value
-        )
-      : categories.value[0] || null;
+    return categories.value?.[0] || null;
   }
   return categories.value.find(
     category => category.id === props.article?.category?.id
@@ -115,10 +108,11 @@ const selectedCategory = computed(() => {
 const categoryList = computed(() => {
   return (
     categories.value
-      .map(({ name, id, icon }) => ({
+      .map(({ name, id, icon, icon_color: iconColor }) => ({
         label: name,
         value: id,
         emoji: icon,
+        iconColor,
         isSelected: isNewArticle.value
           ? id === (selectedCategoryId.value || selectedCategory.value?.id)
           : id === props.article?.category?.id,
@@ -182,63 +176,68 @@ onMounted(() => {
       <OnClickOutside @trigger="openAgentsList = false">
         <Button
           variant="ghost"
+          color="slate"
           class="!px-0 font-normal hover:!bg-transparent"
           text-variant="info"
           @click="openAgentsList = !openAgentsList"
         >
-          <Thumbnail
-            :author="author"
+          <Avatar
             :name="authorName"
-            :size="20"
             :src="authorThumbnailSrc"
+            :size="20"
+            rounded-full
           />
-          <span
-            v-if="author"
-            class="text-sm text-n-slate-12 hover:text-n-slate-11"
-          >
-            {{ author.available_name }}
+          <span class="text-sm text-n-slate-12 hover:text-n-slate-11">
+            {{ authorName || '-' }}
           </span>
         </Button>
         <DropdownMenu
           v-if="openAgentsList && hasAgentList"
           :menu-items="agentList"
-          class="z-[100] w-48 mt-2 overflow-y-auto ltr:left-0 rtl:right-0 top-full max-h-52"
+          show-search
+          class="z-[100] w-48 mt-2 ltr:left-0 rtl:right-0 top-full max-h-60"
           @action="handleArticleAction"
         />
       </OnClickOutside>
     </div>
-    <div class="w-px h-3 bg-slate-50 dark:bg-slate-800" />
+    <div class="w-px h-3 bg-n-weak" />
     <div class="relative">
       <OnClickOutside @trigger="openCategoryList = false">
         <Button
-          :label="
-            selectedCategory?.name ||
-            t('HELP_CENTER.EDIT_ARTICLE_PAGE.EDIT_ARTICLE.UNCATEGORIZED')
-          "
           :icon="!selectedCategory?.icon ? 'i-lucide-shapes' : ''"
           variant="ghost"
+          color="slate"
           class="!px-2 font-normal hover:!bg-transparent"
           @click="openCategoryList = !openCategoryList"
         >
           <span
-            v-if="selectedCategory"
-            class="text-sm text-n-slate-12 hover:text-n-slate-11"
+            class="flex items-center gap-1.5 min-w-0 text-sm text-n-slate-12 hover:text-n-slate-11"
           >
-            {{
-              `${selectedCategory.icon || ''} ${selectedCategory.name || t('HELP_CENTER.EDIT_ARTICLE_PAGE.EDIT_ARTICLE.UNCATEGORIZED')}`
-            }}
+            <EmojiIcon
+              v-if="selectedCategory?.icon"
+              :value="selectedCategory.icon"
+              :color="selectedCategory.icon_color"
+              class="flex-shrink-0 size-4"
+            />
+            <span class="truncate">
+              {{
+                selectedCategory?.name ||
+                t('HELP_CENTER.EDIT_ARTICLE_PAGE.EDIT_ARTICLE.UNCATEGORIZED')
+              }}
+            </span>
           </span>
         </Button>
         <DropdownMenu
           v-if="openCategoryList && hasCategoryMenuItems"
           :menu-items="categoryList"
-          class="w-48 mt-2 z-[100] overflow-y-auto left-0 top-full max-h-52"
+          show-search
+          class="w-48 mt-2 z-[100] left-0 top-full max-h-60"
           @action="handleArticleAction"
         />
       </OnClickOutside>
     </div>
 
-    <div class="w-px h-3 bg-slate-50 dark:bg-slate-800" />
+    <div class="w-px h-3 bg-n-weak" />
     <div class="relative">
       <OnClickOutside @trigger="openProperties = false">
         <Button
@@ -247,6 +246,7 @@ onMounted(() => {
           "
           icon="i-lucide-plus"
           variant="ghost"
+          color="slate"
           :disabled="isNewArticle"
           class="!px-2 font-normal hover:!bg-transparent hover:!text-n-slate-11"
           @click="openProperties = !openProperties"

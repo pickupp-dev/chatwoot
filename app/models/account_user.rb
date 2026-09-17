@@ -2,24 +2,26 @@
 #
 # Table name: account_users
 #
-#  id             :bigint           not null, primary key
-#  active_at      :datetime
-#  auto_offline   :boolean          default(TRUE), not null
-#  availability   :integer          default("online"), not null
-#  role           :integer          default("agent")
-#  created_at     :datetime         not null
-#  updated_at     :datetime         not null
-#  account_id     :bigint
-#  custom_role_id :bigint
-#  inviter_id     :bigint
-#  user_id        :bigint
+#  id                       :bigint           not null, primary key
+#  active_at                :datetime
+#  auto_offline             :boolean          default(TRUE), not null
+#  availability             :integer          default("online"), not null
+#  role                     :integer          default("agent")
+#  created_at               :datetime         not null
+#  updated_at               :datetime         not null
+#  account_id               :bigint
+#  agent_capacity_policy_id :bigint
+#  custom_role_id           :bigint
+#  inviter_id               :bigint
+#  user_id                  :bigint
 #
 # Indexes
 #
-#  index_account_users_on_account_id      (account_id)
-#  index_account_users_on_custom_role_id  (custom_role_id)
-#  index_account_users_on_user_id         (user_id)
-#  uniq_user_id_per_account_id            (account_id,user_id) UNIQUE
+#  index_account_users_on_account_id                (account_id)
+#  index_account_users_on_agent_capacity_policy_id  (agent_capacity_policy_id)
+#  index_account_users_on_custom_role_id            (custom_role_id)
+#  index_account_users_on_user_id                   (user_id)
+#  uniq_user_id_per_account_id                      (account_id,user_id) UNIQUE
 #
 
 class AccountUser < ApplicationRecord
@@ -37,6 +39,8 @@ class AccountUser < ApplicationRecord
   after_create_commit :notify_creation, :create_notification_setting
   after_destroy :notify_deletion, :remove_user_from_account
   after_save :update_presence_in_redis, if: :saved_change_to_availability?
+  after_commit :invalidate_filtered_unread_count_visibility, on: [:create, :destroy]
+  after_update_commit :invalidate_filtered_unread_count_visibility_update, if: :filtered_unread_count_visibility_changed?
 
   validates :user_id, uniqueness: { scope: :account_id }
 
@@ -76,6 +80,22 @@ class AccountUser < ApplicationRecord
 
   def update_presence_in_redis
     OnlineStatusTracker.set_status(account.id, user.id, availability)
+  end
+
+  def filtered_unread_count_visibility_changed?
+    previous_changes.key?('role') || previous_changes.key?('custom_role_id')
+  end
+
+  def invalidate_filtered_unread_count_visibility
+    ::Conversations::UnreadCounts::FilteredCountInvalidator.new(account).user_visibility_changed!(user_id: user_id)
+  end
+
+  def invalidate_filtered_unread_count_visibility_update
+    dispatch_account_cache_invalidated if invalidate_filtered_unread_count_visibility
+  end
+
+  def dispatch_account_cache_invalidated
+    Rails.configuration.dispatcher.dispatch(ACCOUNT_CACHE_INVALIDATED, Time.zone.now, account: account, cache_keys: account.cache_keys)
   end
 end
 

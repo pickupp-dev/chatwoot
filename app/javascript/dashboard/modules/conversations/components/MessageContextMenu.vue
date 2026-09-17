@@ -4,22 +4,26 @@ import { mapGetters } from 'vuex';
 import { useMessageFormatter } from 'shared/composables/useMessageFormatter';
 import ContextMenu from 'dashboard/components/ui/ContextMenu.vue';
 import AddCannedModal from 'dashboard/routes/dashboard/settings/canned/AddCanned.vue';
+import { useSnakeCase } from 'dashboard/composables/useTransformKeys';
 import { copyTextToClipboard } from 'shared/helpers/clipboard';
+import { parseAPIErrorResponse } from 'dashboard/store/utils/api';
 import { conversationUrl, frontendURL } from '../../../helper/URLHelper';
 import {
   ACCOUNT_EVENTS,
   CONVERSATION_EVENTS,
 } from '../../../helper/AnalyticsHelper/events';
-import TranslateModal from 'dashboard/components/widgets/conversation/bubble/TranslateModal.vue';
 import MenuItem from '../../../components/widgets/conversation/contextMenu/menuItem.vue';
 import { useTrack } from 'dashboard/composables';
+import NextButton from 'dashboard/components-next/button/Button.vue';
+import ReportCaptainMessageDialog from './ReportCaptainMessageDialog.vue';
 
 export default {
   components: {
     AddCannedModal,
-    TranslateModal,
     MenuItem,
     ContextMenu,
+    NextButton,
+    ReportCaptainMessageDialog,
   },
   props: {
     message: {
@@ -38,10 +42,15 @@ export default {
       type: Object,
       default: () => ({}),
     },
+    hideButton: {
+      type: Boolean,
+      default: false,
+    },
   },
   emits: ['open', 'close', 'replyTo'],
   setup() {
     const { getPlainText } = useMessageFormatter();
+
     return {
       getPlainText,
     };
@@ -49,7 +58,6 @@ export default {
   data() {
     return {
       isCannedResponseModalOpen: false,
-      showTranslateModal: false,
       showDeleteModal: false,
     };
   },
@@ -57,12 +65,13 @@ export default {
     ...mapGetters({
       getAccount: 'accounts/getAccount',
       currentAccountId: 'getCurrentAccountId',
+      getUISettings: 'getUISettings',
     }),
     plainTextContent() {
       return this.getPlainText(this.messageContent);
     },
     conversationId() {
-      return this.message.conversation_id;
+      return this.message.conversation_id ?? this.message.conversationId;
     },
     messageId() {
       return this.message.id;
@@ -71,7 +80,9 @@ export default {
       return this.message.content;
     },
     contentAttributes() {
-      return this.message.content_attributes;
+      return useSnakeCase(
+        this.message.content_attributes ?? this.message.contentAttributes
+      );
     },
   },
   methods: {
@@ -109,23 +120,25 @@ export default {
     handleClose(e) {
       this.$emit('close', e);
     },
-    handleTranslate() {
-      const { locale } = this.getAccount(this.currentAccountId);
-      this.$store.dispatch('translateMessage', {
-        conversationId: this.conversationId,
-        messageId: this.messageId,
-        targetLanguage: locale || 'en',
-      });
-      useTrack(CONVERSATION_EVENTS.TRANSLATE_A_MESSAGE);
+    async handleTranslate() {
+      const { locale: accountLocale } = this.getAccount(this.currentAccountId);
+      const agentLocale = this.getUISettings?.locale;
+      const targetLanguage = agentLocale || accountLocale || 'en';
+      try {
+        await this.$store.dispatch('translateMessage', {
+          conversationId: this.conversationId,
+          messageId: this.messageId,
+          targetLanguage,
+        });
+        useTrack(CONVERSATION_EVENTS.TRANSLATE_A_MESSAGE);
+      } catch (error) {
+        useAlert(parseAPIErrorResponse(error));
+      }
       this.handleClose();
-      this.showTranslateModal = true;
     },
     handleReplyTo() {
       this.$emit('replyTo', this.message);
       this.handleClose();
-    },
-    onCloseTranslateModal() {
-      this.showTranslateModal = false;
     },
     openDeleteModal() {
       this.handleClose();
@@ -146,6 +159,10 @@ export default {
     closeDeleteModal() {
       this.showDeleteModal = false;
     },
+    openReportDialog() {
+      this.handleClose();
+      this.$refs.reportDialog?.open();
+    },
   },
 };
 </script>
@@ -163,16 +180,9 @@ export default {
         :on-close="hideCannedResponseModal"
       />
     </woot-modal>
-    <!-- Translate Content -->
-    <TranslateModal
-      v-if="showTranslateModal"
-      :content="messageContent"
-      :content-attributes="contentAttributes"
-      @close="onCloseTranslateModal"
-    />
     <!-- Confirm Deletion -->
     <woot-delete-modal
-      v-if="showDeleteModal"
+      v-if="showDeleteModal && enabledOptions['delete']"
       v-model:show="showDeleteModal"
       class="context-menu--delete-modal"
       :on-close="closeDeleteModal"
@@ -182,11 +192,12 @@ export default {
       :confirm-text="$t('CONVERSATION.CONTEXT_MENU.DELETE_CONFIRMATION.DELETE')"
       :reject-text="$t('CONVERSATION.CONTEXT_MENU.DELETE_CONFIRMATION.CANCEL')"
     />
-    <woot-button
-      icon="more-vertical"
-      color-scheme="secondary"
-      variant="clear"
-      size="small"
+    <NextButton
+      v-if="!hideButton"
+      ghost
+      slate
+      sm
+      icon="i-lucide-ellipsis-vertical"
       class="invisible group-hover/context-menu:visible"
       @click="handleOpen"
     />
@@ -216,7 +227,7 @@ export default {
           @click.stop="handleCopy"
         />
         <MenuItem
-          v-if="enabledOptions['copy']"
+          v-if="enabledOptions['translate']"
           :option="{
             icon: 'translate',
             label: $t('CONVERSATION.CONTEXT_MENU.TRANSLATE'),
@@ -226,6 +237,7 @@ export default {
         />
         <hr />
         <MenuItem
+          v-if="enabledOptions['copyLink']"
           :option="{
             icon: 'link',
             label: $t('CONVERSATION.CONTEXT_MENU.COPY_PERMALINK'),
@@ -242,6 +254,16 @@ export default {
           variant="icon"
           @click.stop="showCannedResponseModal"
         />
+        <hr v-if="enabledOptions['report']" />
+        <MenuItem
+          v-if="enabledOptions['report']"
+          :option="{
+            icon: 'warning',
+            label: $t('CONVERSATION.CONTEXT_MENU.REPORT_MESSAGE.LABEL'),
+          }"
+          variant="icon"
+          @click.stop="openReportDialog"
+        />
         <hr v-if="enabledOptions['delete']" />
         <MenuItem
           v-if="enabledOptions['delete']"
@@ -254,34 +276,33 @@ export default {
         />
       </div>
     </ContextMenu>
+    <ReportCaptainMessageDialog
+      v-if="enabledOptions['report']"
+      ref="reportDialog"
+      :message-id="messageId"
+    />
   </div>
 </template>
 
 <style lang="scss" scoped>
 .menu-container {
-  @apply p-1 bg-white dark:bg-slate-900 shadow-xl rounded-md;
+  @apply p-1 bg-n-background shadow-xl rounded-md;
 
   hr:first-child {
     @apply hidden;
   }
 
   hr {
-    @apply m-1 border-b border-solid border-slate-50 dark:border-slate-800/50;
+    @apply m-1 border-b border-solid border-n-strong;
   }
 }
 
 .context-menu--delete-modal {
-  ::v-deep {
-    .modal-container {
-      @apply max-w-[30rem];
+  :deep(.modal-container) {
+    @apply max-w-[30rem];
 
-      h2 {
-        @apply font-medium text-base;
-      }
-    }
-
-    .modal-footer {
-      @apply pt-4 pb-8 px-8;
+    h2 {
+      @apply font-medium text-base;
     }
   }
 }

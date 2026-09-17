@@ -5,10 +5,7 @@ import axios from 'axios';
 // Global Components
 import hljsVuePlugin from '@highlightjs/vue-plugin';
 
-import Multiselect from 'vue-multiselect';
-// import VueFormulate from '@braid/vue-formulate';
 import { plugin, defaultConfig } from '@formkit/vue';
-import WootSwitch from 'components/ui/Switch.vue';
 import WootWizard from 'components/ui/Wizard.vue';
 import FloatingVue from 'floating-vue';
 import WootUiKit from 'dashboard/components';
@@ -18,11 +15,11 @@ import createAxios from 'dashboard/helper/APIHelper';
 
 import commonHelpers, { isJSONValid } from 'dashboard/helper/commons';
 import { sync } from 'vuex-router-sync';
+import { createPinia } from 'pinia';
 import router, { initalizeRouter } from 'dashboard/routes';
 import store from 'dashboard/store';
 import constants from 'dashboard/constants/globals';
 import * as Sentry from '@sentry/vue';
-// import { Integrations } from '@sentry/tracing';
 import {
   initializeAnalyticsEvents,
   initializeChatwootEvents,
@@ -44,9 +41,12 @@ const i18n = createI18n({
 
 sync(store, router);
 
+const pinia = createPinia();
+
 const app = createApp(App);
 app.use(i18n);
 app.use(store);
+app.use(pinia);
 app.use(router);
 
 // [VITE] Disabled this, need to renable later
@@ -88,11 +88,18 @@ app.use(FloatingVue, {
   instantMove: true,
   arrowOverflow: false,
   disposeTimeout: 5000000,
+  // Use the `fixed` strategy so tooltips are positioned relative to the viewport.
+  // With the default `absolute` strategy, a hidden tooltip lingers at a stale offset
+  // and adds to the page's scroll height, letting the whole dashboard over-scroll.
+  // Fixed elements never affect scroll height, so this can't happen.
+  themes: {
+    tooltip: {
+      strategy: 'fixed',
+    },
+  },
 });
 app.use(hljsVuePlugin);
 
-app.component('multiselect', Multiselect);
-app.component('woot-switch', WootSwitch);
 app.component('woot-wizard', WootWizard);
 app.component('fluent-icon', FluentIcon);
 
@@ -101,7 +108,6 @@ app.directive('on-clickaway', onClickaway);
 
 // load common helpers into js
 commonHelpers();
-window.WOOT_STORE = store;
 window.WootConstants = constants;
 window.axios = createAxios(axios);
 // [VITE] Disabled this we don't need it, we can use `useEmitter` directly
@@ -114,7 +120,3 @@ initalizeRouter();
 window.onload = () => {
   app.mount('#app');
 };
-
-window.addEventListener('load', () => {
-  window.playAudioAlert = () => {};
-});

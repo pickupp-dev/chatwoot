@@ -13,37 +13,20 @@ const props = defineProps({
     validator: value =>
       value.every(option => 'value' in option && 'label' in option),
   },
-  placeholder: {
-    type: String,
-    default: '',
-  },
-  modelValue: {
-    type: [String, Number],
-    default: '',
-  },
-  disabled: {
-    type: Boolean,
-    default: false,
-  },
-  searchPlaceholder: {
-    type: String,
-    default: '',
-  },
-  emptyState: {
-    type: String,
-    default: '',
-  },
-  message: {
-    type: String,
-    default: '',
-  },
-  hasError: {
-    type: Boolean,
-    default: false,
-  },
+  placeholder: { type: String, default: '' },
+  // Fallback label shown when the selected value is not in `options` yet
+  // (e.g. API-backed lists that load lazily on open).
+  displayLabel: { type: String, default: '' },
+  modelValue: { type: [String, Number], default: '' },
+  disabled: { type: Boolean, default: false },
+  searchPlaceholder: { type: String, default: '' },
+  emptyState: { type: String, default: '' },
+  message: { type: String, default: '' },
+  hasError: { type: Boolean, default: false },
+  useApiResults: { type: Boolean, default: false }, // useApiResults prop to determine if search is handled by API
 });
 
-const emit = defineEmits(['update:modelValue']);
+const emit = defineEmits(['update:modelValue', 'search', 'open']);
 
 const { t } = useI18n();
 
@@ -54,6 +37,12 @@ const dropdownRef = ref(null);
 const comboboxRef = ref(null);
 
 const filteredOptions = computed(() => {
+  // For API search, don't filter options locally
+  if (props.useApiResults && search.value) {
+    return props.options;
+  }
+
+  // For local search, filter options based on search term
   const searchTerm = search.value.toLowerCase();
   return props.options.filter(option =>
     option.label.toLowerCase().includes(searchTerm)
@@ -66,12 +55,17 @@ const selectedLabel = computed(() => {
   const selected = props.options.find(
     option => option.value === selectedValue.value
   );
-  return selected?.label ?? selectPlaceholder.value;
+  return selected?.label ?? (props.displayLabel || selectPlaceholder.value);
 });
 
 const selectOption = option => {
-  selectedValue.value = option.value;
-  emit('update:modelValue', option.value);
+  if (selectedValue.value === option.value) {
+    selectedValue.value = '';
+    emit('update:modelValue', '');
+  } else {
+    selectedValue.value = option.value;
+    emit('update:modelValue', option.value);
+  }
   open.value = false;
   search.value = '';
 };
@@ -81,6 +75,7 @@ const toggleDropdown = () => {
   open.value = !open.value;
   if (open.value) {
     search.value = '';
+    emit('open');
     nextTick(() => dropdownRef.value?.focus());
   }
 };
@@ -110,21 +105,26 @@ watch(
         :label="selectedLabel"
         trailing-icon
         :disabled="disabled"
-        class="justify-between w-full !px-3 !py-2.5 text-n-slate-12 font-normal group-hover/combobox:border-n-slate-6"
-        :class="{ focused: open }"
+        no-animation
+        class="justify-between w-full !px-3 !py-2.5 text-n-slate-12 font-normal group-hover/combobox:border-n-slate-6 focus:outline-n-brand"
+        :class="{
+          focused: open,
+          '[&:not(.focused)]:dark:outline-n-weak [&:not(.focused)]:hover:enabled:outline-n-slate-6 [&:not(.focused)]:dark:hover:enabled:outline-n-slate-6':
+            !hasError,
+        }"
         :icon="open ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
         @click="toggleDropdown"
       />
 
       <ComboBoxDropdown
         ref="dropdownRef"
+        v-model:search-value="search"
         :open="open"
         :options="filteredOptions"
-        :search-value="search"
         :search-placeholder="searchPlaceholder"
         :empty-state="emptyState"
         :selected-values="selectedValue"
-        @update:search-value="search = $event"
+        @search="emit('search', $event)"
         @select="selectOption"
       />
 

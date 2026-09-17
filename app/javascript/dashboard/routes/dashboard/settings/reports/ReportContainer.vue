@@ -5,19 +5,45 @@ import { GROUP_BY_FILTER, METRIC_CHART } from './constants';
 import fromUnixTime from 'date-fns/fromUnixTime';
 import format from 'date-fns/format';
 import { formatTime } from '@chatwoot/utils';
+import { useAlert } from 'dashboard/composables';
 import ChartStats from './components/ChartElements/ChartStats.vue';
 import BarChart from 'shared/components/charts/BarChart.vue';
+import ReportDrilldownDrawer from './components/ReportDrilldownDrawer.vue';
 
 export default {
-  components: { ChartStats, BarChart },
+  components: { ChartStats, BarChart, ReportDrilldownDrawer },
   props: {
     groupBy: {
       type: Object,
       default: () => ({}),
     },
+    from: {
+      type: Number,
+      default: 0,
+    },
+    to: {
+      type: Number,
+      default: 0,
+    },
+    reportType: {
+      type: String,
+      default: 'account',
+    },
+    selectedItemId: {
+      type: [String, Number],
+      default: null,
+    },
+    businessHours: {
+      type: Boolean,
+      default: false,
+    },
     accountSummaryKey: {
       type: String,
       default: 'getAccountSummary',
+    },
+    summaryFetchingKey: {
+      type: String,
+      default: 'getAccountSummaryFetchingStatus',
     },
     reportKeys: {
       type: Object,
@@ -38,10 +64,27 @@ export default {
     );
     return { calculateTrend, isAverageMetricType };
   },
+  data() {
+    return {
+      drilldownRequest: null,
+      drilldownMetric: null,
+      drilldownIndex: null,
+    };
+  },
   computed: {
     ...mapGetters({
       accountReport: 'getAccountReports',
+      currentRole: 'getCurrentRole',
     }),
+    isAdmin() {
+      return this.currentRole === 'administrator';
+    },
+    canDrilldownPrev() {
+      return this.findDrillableIndex(this.drilldownIndex - 1, -1) !== null;
+    },
+    canDrilldownNext() {
+      return this.findDrillableIndex(this.drilldownIndex + 1, 1) !== null;
+    },
     metrics() {
       const reportKeys = Object.keys(this.reportKeys);
       const infoText = {
@@ -112,22 +155,104 @@ export default {
       };
     },
     getChartOptions(metric) {
-      let tooltips = {};
+      const options = {
+        scales: METRIC_CHART[metric.KEY].scales,
+      };
+
+      // Only add tooltip configuration for time-based metrics
       if (this.isAverageMetricType(metric.KEY)) {
-        tooltips.callbacks = {
-          label: tooltipItem => {
-            return this.$t(metric.TOOLTIP_TEXT, {
-              metricValue: formatTime(tooltipItem.yLabel),
-              conversationCount:
-                this.accountReport.data[metric.KEY][tooltipItem.index].count,
-            });
+        options.plugins = {
+          tooltip: {
+            callbacks: {
+              label: ({ raw, dataIndex }) => {
+                return this.$t(metric.TOOLTIP_TEXT, {
+                  metricValue: formatTime(raw || 0),
+                  conversationCount:
+                    this.accountReport.data[metric.KEY][dataIndex]?.count || 0,
+                });
+              },
+            },
           },
         };
       }
-      return {
-        scales: METRIC_CHART[metric.KEY].scales,
-        tooltips: tooltips,
+
+      return options;
+    },
+    isDrilldownEnabled() {
+      return !!(this.from && this.to);
+    },
+    onChartElementClick(metric, event) {
+      if (!this.isDrilldownEnabled()) return;
+
+      const dataPoint = this.accountReport.data[metric.KEY]?.[event.dataIndex];
+      if (!this.canOpenDrilldown(metric, dataPoint)) return;
+      if (!this.isAdmin) {
+        useAlert(this.$t('REPORT.DRILLDOWN.ADMIN_ONLY'));
+        return;
+      }
+
+      this.openDrilldownAt(metric, event.dataIndex);
+    },
+    openDrilldownAt(metric, dataIndex) {
+      const dataPoint = this.accountReport.data[metric.KEY]?.[dataIndex];
+      if (!this.canOpenDrilldown(metric, dataPoint)) return;
+
+      const labels = this.getCollection(metric).labels || [];
+
+      this.drilldownMetric = metric;
+      this.drilldownIndex = dataIndex;
+      this.drilldownRequest = {
+        metric: metric.KEY,
+        metricName: metric.NAME,
+        bucketLabel: labels[dataIndex],
+        bucketTimestamp: dataPoint.timestamp,
+        bucketValue: dataPoint.value,
+        isAverageMetric: this.isAverageMetricType(metric.KEY),
+        from: this.from,
+        to: this.to,
+        type: this.reportType,
+        id: this.selectedItemId,
+        groupBy: this.groupBy?.period,
+        businessHours: this.businessHours,
       };
+    },
+    navigateDrilldown(direction) {
+      const nextIndex = this.findDrillableIndex(
+        this.drilldownIndex + direction,
+        direction
+      );
+      if (nextIndex === null) return;
+
+      this.openDrilldownAt(this.drilldownMetric, nextIndex);
+    },
+    findDrillableIndex(startIndex, step) {
+      if (!this.drilldownMetric) return null;
+
+      const data = this.accountReport.data[this.drilldownMetric.KEY] || [];
+      for (
+        let index = startIndex;
+        index >= 0 && index < data.length;
+        index += step
+      ) {
+        if (this.canOpenDrilldown(this.drilldownMetric, data[index]))
+          return index;
+      }
+
+      return null;
+    },
+    canOpenDrilldown(metric, dataPoint) {
+      if (!dataPoint) return false;
+
+      if (this.isAverageMetricType(metric.KEY)) {
+        return dataPoint.count > 0;
+      }
+
+      return dataPoint.value > 0;
+    },
+    closeDrilldown() {
+      this.drilldownRequest = null;
+      this.drilldownMetric = null;
+      this.drilldownIndex = null;
     },
   },
 };
@@ -135,14 +260,18 @@ export default {
 
 <template>
   <div
-    class="grid grid-cols-1 p-2 bg-white border rounded-md md:grid-cols-2 lg:grid-cols-3 dark:bg-slate-800 border-slate-100 dark:border-slate-700"
+    class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 px-6 py-5 shadow outline-1 outline outline-n-container rounded-xl bg-n-solid-2 mt-4"
   >
     <div
       v-for="metric in metrics"
       :key="metric.KEY"
       class="p-4 mb-3 rounded-md"
     >
-      <ChartStats :metric="metric" :account-summary-key="accountSummaryKey" />
+      <ChartStats
+        :metric="metric"
+        :account-summary-key="accountSummaryKey"
+        :summary-fetching-key="summaryFetchingKey"
+      />
       <div class="mt-4 h-72">
         <woot-loading-state
           v-if="accountReport.isFetching[metric.KEY]"
@@ -154,12 +283,33 @@ export default {
             v-if="accountReport.data[metric.KEY].length"
             :collection="getCollection(metric)"
             :chart-options="getChartOptions(metric)"
+            :clickable="isDrilldownEnabled()"
+            @element-click="onChartElementClick(metric, $event)"
           />
-          <span v-else class="text-sm text-slate-600">
+          <span v-else class="text-sm text-n-slate-10">
             {{ $t('REPORT.NO_ENOUGH_DATA') }}
           </span>
         </div>
       </div>
     </div>
   </div>
+  <ReportDrilldownDrawer
+    :id="drilldownRequest?.id"
+    :open="!!drilldownRequest"
+    :metric="drilldownRequest?.metric"
+    :metric-name="drilldownRequest?.metricName"
+    :bucket-label="drilldownRequest?.bucketLabel"
+    :bucket-timestamp="drilldownRequest?.bucketTimestamp"
+    :bucket-value="drilldownRequest?.bucketValue"
+    :is-average-metric="drilldownRequest?.isAverageMetric"
+    :from="drilldownRequest?.from"
+    :to="drilldownRequest?.to"
+    :type="drilldownRequest?.type"
+    :group-by="drilldownRequest?.groupBy"
+    :business-hours="drilldownRequest?.businessHours"
+    :can-prev="canDrilldownPrev"
+    :can-next="canDrilldownNext"
+    @navigate="navigateDrilldown"
+    @close="closeDrilldown"
+  />
 </template>

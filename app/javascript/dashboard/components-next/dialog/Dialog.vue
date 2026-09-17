@@ -1,12 +1,12 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { OnClickOutside } from '@vueuse/components';
 import { useI18n } from 'vue-i18n';
-import { useMapGetter } from 'dashboard/composables/store.js';
 
 import Button from 'dashboard/components-next/button/Button.vue';
+import TeleportWithDirection from 'dashboard/components-next/TeleportWithDirection.vue';
 
-defineProps({
+const props = defineProps({
   type: {
     type: String,
     default: 'edit',
@@ -14,7 +14,7 @@ defineProps({
   },
   title: {
     type: String,
-    required: true,
+    default: '',
   },
   description: {
     type: String,
@@ -48,24 +48,65 @@ defineProps({
     type: Boolean,
     default: false,
   },
+  width: {
+    type: String,
+    default: 'lg',
+    validator: value => ['3xl', '2xl', 'xl', 'lg', 'md', 'sm'].includes(value),
+  },
+  position: {
+    type: String,
+    default: 'center',
+    validator: value => ['center', 'top'].includes(value),
+  },
 });
 
 const emit = defineEmits(['confirm', 'close']);
 
 const { t } = useI18n();
 
-const isRTL = useMapGetter('accounts/isRTL');
-
 const dialogRef = ref(null);
 const dialogContentRef = ref(null);
+const isOpen = ref(false);
+
+const maxWidthClass = computed(() => {
+  const classesMap = {
+    '3xl': 'max-w-3xl',
+    '2xl': 'max-w-2xl',
+    xl: 'max-w-xl',
+    lg: 'max-w-lg',
+    md: 'max-w-md',
+    sm: 'max-w-sm',
+  };
+
+  return classesMap[props.width] ?? 'max-w-md';
+});
+
+const positionClass = computed(() =>
+  props.position === 'top' ? 'dialog-position-top' : ''
+);
 
 const open = () => {
+  isOpen.value = true;
   dialogRef.value?.showModal();
 };
+
 const close = () => {
   emit('close');
   dialogRef.value?.close();
+  isOpen.value = false;
 };
+
+// Only close if the close event originated from this dialog,
+// not from a child dialog (e.g. ProseMirror prompt) bubbling up.
+const handleDialogClose = e => e.target === dialogRef.value && close();
+
+// Only close on click-outside if this dialog is the topmost one.
+// If another dialog (e.g. ProseMirror prompt) is open on top, ignore.
+const handleClickOutside = () => {
+  const dialogs = document.querySelectorAll('dialog[open]');
+  if (dialogs[dialogs.length - 1] === dialogRef.value) close();
+};
+
 const confirm = () => {
   emit('confirm');
 };
@@ -74,21 +115,25 @@ defineExpose({ open, close });
 </script>
 
 <template>
-  <Teleport to="body">
+  <TeleportWithDirection to="body">
     <dialog
       ref="dialogRef"
-      class="w-full max-w-lg transition-all duration-300 ease-in-out shadow-xl rounded-xl"
-      :class="overflowYAuto ? 'overflow-y-auto' : 'overflow-visible'"
-      :dir="isRTL ? 'rtl' : 'ltr'"
-      @close="close"
+      class="w-full transition-all duration-300 ease-in-out shadow-xl rounded-xl"
+      :class="[
+        maxWidthClass,
+        positionClass,
+        overflowYAuto ? 'overflow-y-auto' : 'overflow-visible',
+      ]"
+      @close.prevent="handleDialogClose"
     >
-      <OnClickOutside @trigger="close">
-        <div
+      <OnClickOutside @trigger="handleClickOutside">
+        <form
           ref="dialogContentRef"
-          class="flex flex-col w-full h-auto gap-6 p-6 overflow-visible text-left align-middle transition-all duration-300 ease-in-out transform bg-n-alpha-3 backdrop-blur-[100px] shadow-xl rounded-xl"
+          class="flex flex-col w-full h-auto gap-6 p-6 overflow-visible text-start align-middle transition-all duration-300 ease-in-out transform bg-n-alpha-3 backdrop-blur-[100px] shadow-xl rounded-xl"
+          @submit.prevent="confirm"
           @click.stop
         >
-          <div class="flex flex-col gap-2">
+          <div v-if="title || description" class="flex flex-col gap-2">
             <h3 class="text-base font-medium leading-6 text-n-slate-12">
               {{ title }}
             </h3>
@@ -98,36 +143,46 @@ defineExpose({ open, close });
               </p>
             </slot>
           </div>
-          <slot name="form">
-            <!-- Form content will be injected here -->
+          <slot v-if="isOpen" />
+          <!-- Dialog content will be injected here -->
+          <slot name="footer">
+            <div
+              v-if="showCancelButton || showConfirmButton"
+              class="flex items-center justify-between w-full gap-3"
+            >
+              <Button
+                v-if="showCancelButton"
+                variant="faded"
+                color="slate"
+                :label="cancelButtonLabel || t('DIALOG.BUTTONS.CANCEL')"
+                class="w-full"
+                type="button"
+                @click="close"
+              />
+              <Button
+                v-if="showConfirmButton"
+                :color="type === 'edit' ? 'blue' : 'ruby'"
+                :label="confirmButtonLabel || t('DIALOG.BUTTONS.CONFIRM')"
+                class="w-full"
+                :is-loading="isLoading"
+                :disabled="disableConfirmButton || isLoading"
+                type="submit"
+              />
+            </div>
           </slot>
-          <div class="flex items-center justify-between w-full gap-3">
-            <Button
-              v-if="showCancelButton"
-              variant="faded"
-              color="slate"
-              :label="cancelButtonLabel || t('DIALOG.BUTTONS.CANCEL')"
-              class="w-full"
-              @click="close"
-            />
-            <Button
-              v-if="showConfirmButton"
-              :color="type === 'edit' ? 'blue' : 'ruby'"
-              :label="confirmButtonLabel || t('DIALOG.BUTTONS.CONFIRM')"
-              class="w-full"
-              :is-loading="isLoading"
-              :disabled="disableConfirmButton || isLoading"
-              @click="confirm"
-            />
-          </div>
-        </div>
+        </form>
       </OnClickOutside>
     </dialog>
-  </Teleport>
+  </TeleportWithDirection>
 </template>
 
 <style scoped>
 dialog::backdrop {
-  @apply dark:bg-n-alpha-white bg-n-alpha-black2;
+  @apply bg-n-alpha-black1 backdrop-blur-[4px];
+}
+
+.dialog-position-top {
+  margin-top: clamp(2rem, 5vh, 5rem);
+  margin-bottom: auto;
 }
 </style>

@@ -5,8 +5,20 @@ import { useAlert } from 'dashboard/composables';
 import { required } from '@vuelidate/validators';
 import router from '../../../../index';
 import { isPhoneE164OrEmpty, isNumber } from 'shared/helpers/Validators';
+import InboxesAPI from 'dashboard/api/inboxes';
+
+import NextButton from 'dashboard/components-next/button/Button.vue';
 
 export default {
+  components: {
+    NextButton,
+  },
+  props: {
+    enableCallingOnComplete: {
+      type: Boolean,
+      default: false,
+    },
+  },
   setup() {
     return { v$: useVuelidate() };
   },
@@ -40,7 +52,7 @@ export default {
         const whatsappChannel = await this.$store.dispatch(
           'inboxes/createChannel',
           {
-            name: this.inboxName,
+            name: this.inboxName?.trim(),
             channel: {
               type: 'whatsapp',
               phone_number: this.phoneNumber,
@@ -53,6 +65,14 @@ export default {
             },
           }
         );
+
+        if (this.enableCallingOnComplete) {
+          try {
+            await InboxesAPI.enableWhatsappCalling(whatsappChannel.id);
+          } catch (_) {
+            useAlert(this.$t('INBOX_MGMT.WHATSAPP_CALLING.ENABLE_FAILED'));
+          }
+        }
 
         router.replace({
           name: 'settings_inboxes_add_agents',
@@ -72,8 +92,8 @@ export default {
 </script>
 
 <template>
-  <form class="flex flex-wrap mx-0" @submit.prevent="createChannel()">
-    <div class="w-[65%] flex-shrink-0 flex-grow-0 max-w-[65%]">
+  <form class="flex flex-wrap flex-col mx-0" @submit.prevent="createChannel()">
+    <div class="flex-shrink-0 flex-grow-0">
       <label :class="{ error: v$.inboxName.$error }">
         {{ $t('INBOX_MGMT.ADD.WHATSAPP.INBOX_NAME.LABEL') }}
         <input
@@ -88,7 +108,7 @@ export default {
       </label>
     </div>
 
-    <div class="w-[65%] flex-shrink-0 flex-grow-0 max-w-[65%]">
+    <div class="flex-shrink-0 flex-grow-0">
       <label :class="{ error: v$.phoneNumber.$error }">
         {{ $t('INBOX_MGMT.ADD.WHATSAPP.PHONE_NUMBER.LABEL') }}
         <input
@@ -103,7 +123,7 @@ export default {
       </label>
     </div>
 
-    <div class="w-[65%] flex-shrink-0 flex-grow-0 max-w-[65%]">
+    <div class="flex-shrink-0 flex-grow-0">
       <label :class="{ error: v$.phoneNumberId.$error }">
         <span>
           {{ $t('INBOX_MGMT.ADD.WHATSAPP.PHONE_NUMBER_ID.LABEL') }}
@@ -122,7 +142,7 @@ export default {
       </label>
     </div>
 
-    <div class="w-[65%] flex-shrink-0 flex-grow-0 max-w-[65%]">
+    <div class="flex-shrink-0 flex-grow-0">
       <label :class="{ error: v$.businessAccountId.$error }">
         <span>
           {{ $t('INBOX_MGMT.ADD.WHATSAPP.BUSINESS_ACCOUNT_ID.LABEL') }}
@@ -141,7 +161,7 @@ export default {
       </label>
     </div>
 
-    <div class="w-[65%] flex-shrink-0 flex-grow-0 max-w-[65%]">
+    <div class="flex-shrink-0 flex-grow-0">
       <label :class="{ error: v$.apiKey.$error }">
         <span>
           {{ $t('INBOX_MGMT.ADD.WHATSAPP.API_KEY.LABEL') }}
@@ -158,10 +178,14 @@ export default {
       </label>
     </div>
 
-    <div class="w-full">
-      <woot-submit-button
-        :loading="uiFlags.isCreating"
-        :button-text="$t('INBOX_MGMT.ADD.WHATSAPP.SUBMIT_BUTTON')"
+    <div class="w-full mt-4">
+      <NextButton
+        :disabled="uiFlags.isCreating"
+        :is-loading="uiFlags.isCreating"
+        type="submit"
+        solid
+        blue
+        :label="$t('INBOX_MGMT.ADD.WHATSAPP.SUBMIT_BUTTON')"
       />
     </div>
   </form>
