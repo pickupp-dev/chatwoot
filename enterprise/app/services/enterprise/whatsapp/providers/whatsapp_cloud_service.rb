@@ -4,6 +4,8 @@ module Enterprise::Whatsapp::Providers::WhatsappCloudService
   # Use the configured global version (defaulting to v22.0) for call-flow endpoints.
   WHATSAPP_CALLING_API_VERSION_FALLBACK = 'v22.0'.freeze
 
+  include Enterprise::Whatsapp::Providers::WhatsappCloudCallSettings
+
   def pre_accept_call(call_id, sdp_answer)
     call_api('pre_accept_call', call_action_body(call_id, 'pre_accept', sdp_answer))
   end
@@ -20,9 +22,9 @@ module Enterprise::Whatsapp::Providers::WhatsappCloudService
     call_api('terminate_call', call_action_body(call_id, 'terminate'))
   end
 
-  def send_call_permission_request(to_phone_number, body_text = I18n.t('conversations.messages.whatsapp.call_permission_request_body'))
+  def send_call_permission_request(recipient, body_text = I18n.t('conversations.messages.whatsapp.call_permission_request_body'))
     response = HTTParty.post(
-      "#{calls_phone_id_path}/messages", headers: api_headers, body: permission_request_body(to_phone_number, body_text)
+      "#{calls_phone_id_path}/messages", headers: api_headers, body: permission_request_body(recipient, body_text)
     )
 
     unless response.success?
@@ -33,27 +35,11 @@ module Enterprise::Whatsapp::Providers::WhatsappCloudService
     response.parsed_response
   end
 
-  def initiate_call(to_phone_number, sdp_offer)
+  def initiate_call(recipient, sdp_offer)
     response = HTTParty.post(
-      "#{calls_phone_id_path}/calls", headers: api_headers, body: initiate_call_body(to_phone_number, sdp_offer)
+      "#{calls_phone_id_path}/calls", headers: api_headers, body: initiate_call_body(recipient, sdp_offer)
     )
     process_initiate_call_response(response)
-  end
-
-  # Sets WABA calling status ('ENABLED'/'DISABLED'). Returns true, or raises with
-  # Meta's user-facing message on failure so the caller can surface it.
-  def update_calling_status(status)
-    response = HTTParty.post(
-      "#{calls_phone_id_path}/settings",
-      headers: api_headers,
-      body: { calling: { status: status } }.to_json
-    )
-    return true if response.success?
-
-    parsed = response.parsed_response.is_a?(Hash) ? response.parsed_response : {}
-    error = parsed['error'].is_a?(Hash) ? parsed['error'] : {}
-    Rails.logger.error "[WHATSAPP CALL] update_calling_status failed: status=#{response.code} body=#{response.body}"
-    raise meta_error_message(error, 'Failed to update calling status')
   end
 
   private
@@ -78,9 +64,9 @@ module Enterprise::Whatsapp::Providers::WhatsappCloudService
     response.success?
   end
 
-  def permission_request_body(to_phone_number, body_text)
+  def permission_request_body(recipient, body_text)
     {
-      messaging_product: 'whatsapp', recipient_type: 'individual', to: to_phone_number,
+      messaging_product: 'whatsapp', recipient_type: 'individual', **recipient_params(recipient),
       type: 'interactive',
       interactive: {
         type: 'call_permission_request',
@@ -90,11 +76,15 @@ module Enterprise::Whatsapp::Providers::WhatsappCloudService
     }.to_json
   end
 
-  def initiate_call_body(to_phone_number, sdp_offer)
+  def initiate_call_body(recipient, sdp_offer)
     {
-      messaging_product: 'whatsapp', to: to_phone_number, action: 'connect',
+      messaging_product: 'whatsapp', **call_recipient_params(recipient), action: 'connect',
       session: { sdp: sdp_offer, sdp_type: 'offer' }
     }.to_json
+  end
+
+  def call_recipient_params(recipient)
+    recipient.to_s.match?(RegexHelper::WHATSAPP_BSUID_REGEX) ? { recipient: recipient } : { to: recipient }
   end
 
   def process_initiate_call_response(response)

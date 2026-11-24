@@ -2,7 +2,7 @@ import {
   formatDate,
   importedCount,
   isActiveIntercomImport,
-  statusDotClass,
+  isActiveIntegrationImport,
 } from '../importStatus';
 
 describe('importStatus', () => {
@@ -32,12 +32,38 @@ describe('importStatus', () => {
     });
   });
 
-  describe('importedCount', () => {
-    it('sums Intercom imported stats', () => {
+  describe('isActiveIntegrationImport', () => {
+    it('treats matching Freshdesk and Intercom imports as active', () => {
       expect(
-        importedCount({
+        isActiveIntegrationImport({
+          data_type: 'freshdesk',
+          source_provider: 'freshdesk',
+          status: 'pending',
+        })
+      ).toBe(true);
+      expect(
+        isActiveIntegrationImport({
           data_type: 'intercom',
           source_provider: 'intercom',
+          status: 'processing',
+        })
+      ).toBe(true);
+      expect(
+        isActiveIntegrationImport({
+          data_type: 'freshdesk',
+          source_provider: 'intercom',
+          status: 'processing',
+        })
+      ).toBe(false);
+    });
+  });
+
+  describe('importedCount', () => {
+    it('sums integration imported stats', () => {
+      expect(
+        importedCount({
+          data_type: 'freshdesk',
+          source_provider: 'freshdesk',
           processed_records: 20,
           stats: {
             contacts: { imported: 2 },
@@ -57,22 +83,6 @@ describe('importStatus', () => {
           stats: {},
         })
       ).toBe(7);
-    });
-  });
-
-  describe('statusDotClass', () => {
-    it('maps each status to its dot color class', () => {
-      expect(statusDotClass('pending')).toBe('bg-n-amber-9');
-      expect(statusDotClass('processing')).toBe('bg-n-blue-9');
-      expect(statusDotClass('completed')).toBe('bg-n-teal-9');
-      expect(statusDotClass('completed_with_errors')).toBe('bg-n-amber-9');
-      expect(statusDotClass('failed')).toBe('bg-n-ruby-9');
-      expect(statusDotClass('abandoned')).toBe('bg-n-slate-9');
-    });
-
-    it('falls back to slate for unknown or missing status', () => {
-      expect(statusDotClass('unknown')).toBe('bg-n-slate-9');
-      expect(statusDotClass(undefined)).toBe('bg-n-slate-9');
     });
   });
 

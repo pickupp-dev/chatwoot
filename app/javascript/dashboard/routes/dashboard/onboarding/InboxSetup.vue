@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useStore, useMapGetter } from 'dashboard/composables/store';
 import { useAlert, useTrack } from 'dashboard/composables';
 import { useAccount } from 'dashboard/composables/useAccount';
@@ -19,11 +19,30 @@ import { CHANNEL_TYPES } from 'dashboard/helper/inbox';
 import { useChannelConnect } from './inbox-setup/useChannelConnect';
 import { useDetectedChannels } from './inbox-setup/useDetectedChannels';
 import { DIALOG_CHANNELS } from './inbox-setup/constants';
+import Banner from 'dashboard/components-next/banner/Banner.vue';
+import InstagramAccountPicker from '../settings/inbox/channels/instagram/AccountPicker.vue';
+import { META_RESTRICTION_STATUS_URL } from 'dashboard/constants/globals';
 
 const { t } = useI18n();
 const store = useStore();
 const router = useRouter();
-const { accountId, currentAccount, finishOnboarding } = useAccount();
+const route = useRoute();
+const instagramConnectionToken = computed(() =>
+  typeof route.query.connection_token === 'string'
+    ? route.query.connection_token
+    : ''
+);
+const cancelInstagramConnection = () => {
+  const query = { ...route.query };
+  delete query.connection_token;
+  router.replace({ query });
+};
+const {
+  accountId,
+  currentAccount,
+  finishOnboarding,
+  isMetaInboxCreationDisabled,
+} = useAccount();
 const { isEnterprise } = useConfig();
 const { connectViaOAuth, connectWhatsapp } = useChannelConnect();
 
@@ -43,6 +62,9 @@ const {
 } = useDetectedChannels();
 
 const channelsDialogRef = ref(null);
+const showMetaRestrictionBanner = computed(
+  () => isMetaInboxCreationDisabled.value
+);
 
 // The initial inboxes fetch happens in WebWidgetCreationStatus, which polls
 // `inboxes/get` from its own mount — no need to dispatch it here too.
@@ -121,9 +143,40 @@ const connectChannel = channel => {
       </OnboardingSection>
 
       <OnboardingSection
+        v-if="instagramConnectionToken"
+        :title="t('ONBOARDING_INBOX_SETUP.CHANNELS.TITLE')"
+        icon="i-ri-instagram-line"
+      >
+        <InstagramAccountPicker
+          :connection-token="instagramConnectionToken"
+          class="mx-auto p-4"
+          @cancel="cancelInstagramConnection"
+        />
+      </OnboardingSection>
+      <OnboardingSection
+        v-else
         :title="t('ONBOARDING_INBOX_SETUP.CHANNELS.TITLE')"
         icon="i-lucide-inbox"
       >
+        <Banner v-if="showMetaRestrictionBanner" color="amber" class="m-3">
+          <div class="flex items-start gap-3 text-start">
+            <Icon
+              icon="i-lucide-triangle-alert"
+              class="flex-shrink-0 size-4 mt-0.5"
+            />
+            <span>
+              {{ t('ONBOARDING_INBOX_SETUP.META_RESTRICTION.MESSAGE') }}
+              <a
+                :href="META_RESTRICTION_STATUS_URL"
+                class="link underline"
+                rel="noopener noreferrer nofollow"
+                target="_blank"
+              >
+                {{ t('ONBOARDING_INBOX_SETUP.META_RESTRICTION.STATUS_LINK') }}
+              </a>
+            </span>
+          </div>
+        </Banner>
         <div
           v-if="hasDetectedChannels"
           class="flex items-center gap-2 p-3 border-b border-dashed border-n-strong"
